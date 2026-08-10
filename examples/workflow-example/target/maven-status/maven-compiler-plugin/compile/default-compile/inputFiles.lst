@@ -1,0 +1,12 @@
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\provider\WebhookEventProvider.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\examples\SampleWorkflowApplication.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\MCPResponseEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\LLMResponseEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\WebhookEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\provider\TimerEventProvider.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\RedisEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\UserInputEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\ApprovalPayload.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\ApprovalEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\KafkaEvent.java
+C:\Users\james\IdeaProjects\tinystruct-workflow\examples\workflow-example\src\main\java\org\tinystruct\workflow\event\TimerEvent.java
