@@ -106,7 +106,7 @@ Workflow executions transition through the following lifecycle states:
 ## Requirements & Installation
 
 - **Java**: 17 or higher
-- **tinystruct Framework**: 1.7.28 or higher
+- **tinystruct Framework**: 1.7.34 or higher
 - **Lettuce**: 7.6.0.RELEASE (if Redis Snapshot Repository is used)
 
 ### Maven Dependency

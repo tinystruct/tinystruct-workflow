@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.tinystruct</groupId>
     <artifactId>tinystruct-workflow</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>tinystruct-workflow</name>
     <description>Workflow engine module based on tinystruct framework</description>
     <url>https://tinystruct.org</url>
@@ -33,7 +33,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tinystruct.version>1.7.28</tinystruct.version>
+        <tinystruct.version>1.7.34</tinystruct.version>
         <lettuce.version>7.6.0.RELEASE</lettuce.version>
         <jupiter.version>6.1.1</jupiter.version>
     </properties>
