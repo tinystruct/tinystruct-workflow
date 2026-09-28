@@ -81,28 +81,57 @@ class ExecutionRuntime {
         logger.log(Level.INFO, "Workflow completed: {0}", context.getExecutionId());
     }
 
+    /**
+     * Resumes a WAITING execution, at most once however many callers race.
+     *
+     * <p>The claim is the repository's {@code WAITING → RUNNING} compare-and-set, not the lock:
+     * {@link DistributedLock} coordinates through a lock file in the working directory, so it says
+     * nothing about a second host. The lock is still taken, because it keeps the common
+     * same-process race off the storage.
+     */
     void resume(String executionId, Event<?> event) throws WorkflowException {
         Lock lock = new DistributedLock("wf:" + executionId);
         try {
             lock.lock();
 
+            if (!snapshotRepository.compareAndSetStatus(executionId, WorkflowStatus.WAITING, WorkflowStatus.RUNNING)) {
+                ExecutionContext current = snapshotRepository.load(executionId);
+                if (current == null) {
+                    throw new WorkflowNotFoundException(executionId);
+                }
+                throw new WorkflowException("Cannot resume execution " + executionId
+                        + " — current status: " + current.getStatus());
+            }
+
             ExecutionContext context = snapshotRepository.load(executionId);
             if (context == null) {
                 throw new WorkflowNotFoundException(executionId);
-            }
-            if (context.getStatus() != WorkflowStatus.WAITING) {
-                throw new WorkflowException("Cannot resume execution " + executionId
-                        + " — current status: " + context.getStatus());
             }
 
             if (event != null) {
                 context.getVariables().put("__resumePayload", event.getPayload());
             }
             context.setCurrentNodeIndex(context.getCurrentNodeIndex() + 1);
-            execute(context);
-
+            try {
+                execute(context);
+            } catch (WorkflowException e) {
+                // A node that fails is already persisted as FAILED by handleFailure. Anything that
+                // fails earlier — an unregistered definition, say — would otherwise leave the claim
+                // standing and strand the execution as RUNNING, so hand it back.
+                releaseClaim(executionId);
+                throw e;
+            }
         } finally {
             lock.unlock();
+        }
+    }
+
+    /** Undoes a claim that led nowhere. A no-op once the execution has moved on by itself. */
+    private void releaseClaim(String executionId) {
+        try {
+            snapshotRepository.compareAndSetStatus(executionId, WorkflowStatus.RUNNING, WorkflowStatus.WAITING);
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Could not release the claim on execution: " + executionId, e);
         }
     }
 

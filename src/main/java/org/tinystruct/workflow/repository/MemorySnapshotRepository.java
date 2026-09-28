@@ -2,8 +2,12 @@ package org.tinystruct.workflow.repository;
 
 import org.tinystruct.workflow.ExecutionContext;
 import org.tinystruct.workflow.SnapshotIOException;
+import org.tinystruct.workflow.WorkflowStatus;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * In-memory {@link SnapshotRepository} backed by a {@link ConcurrentHashMap}.
@@ -49,5 +53,54 @@ public class MemorySnapshotRepository implements SnapshotRepository {
             throw new SnapshotIOException("executionId must not be null");
         }
         snapshots.remove(executionId);
+    }
+
+    /** Atomic through {@link ConcurrentHashMap#computeIfPresent}, which holds the bin lock. */
+    @Override
+    public boolean compareAndSetStatus(String executionId, WorkflowStatus expected, WorkflowStatus target)
+            throws SnapshotIOException {
+        if (executionId == null || expected == null || target == null) {
+            throw new SnapshotIOException("executionId, expected and target must not be null");
+        }
+        AtomicBoolean changed = new AtomicBoolean();
+        SnapshotIOException[] failure = new SnapshotIOException[1];
+        snapshots.computeIfPresent(executionId, (id, json) -> {
+            try {
+                ExecutionContext context = ExecutionContext.fromJson(json);
+                if (context.getStatus() != expected) {
+                    return json;
+                }
+                context.setStatus(target);
+                context.setUpdatedTime(System.currentTimeMillis());
+                changed.set(true);
+                return context.toJson();
+            } catch (Exception e) {
+                failure[0] = new SnapshotIOException("Failed to update status for execution: " + id, e);
+                return json;
+            }
+        });
+        if (failure[0] != null) {
+            throw failure[0];
+        }
+        return changed.get();
+    }
+
+    @Override
+    public List<ExecutionContext> findByStatus(WorkflowStatus status) throws SnapshotIOException {
+        if (status == null) {
+            throw new SnapshotIOException("status must not be null");
+        }
+        List<ExecutionContext> found = new ArrayList<>();
+        for (String json : snapshots.values()) {
+            try {
+                ExecutionContext context = ExecutionContext.fromJson(json);
+                if (context.getStatus() == status) {
+                    found.add(context);
+                }
+            } catch (Exception e) {
+                throw new SnapshotIOException("Failed to deserialize a stored context", e);
+            }
+        }
+        return found;
     }
 }

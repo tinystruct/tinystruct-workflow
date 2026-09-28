@@ -1,16 +1,23 @@
 package org.tinystruct.workflow.repository;
 
+import io.lettuce.core.KeyScanCursor;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.ScanArgs;
+import io.lettuce.core.ScanCursor;
+import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import org.tinystruct.system.Configuration;
 import org.tinystruct.system.Settings;
 import org.tinystruct.workflow.ExecutionContext;
 import org.tinystruct.workflow.SnapshotIOException;
+import org.tinystruct.workflow.WorkflowStatus;
 
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Redis-backed {@link SnapshotRepository} using Lettuce.
@@ -89,6 +96,73 @@ public class RedisSnapshotRepository implements SnapshotRepository, Closeable {
         } catch (Exception e) {
             throw new SnapshotIOException("Failed to delete snapshot from Redis for key: " + key, e);
         }
+    }
+
+    /**
+     * A real cross-host claim: {@code WATCH} the key, check the status, then {@code MULTI}/{@code EXEC}.
+     * Redis discards the transaction if anyone else wrote the key in between, so exactly one caller wins.
+     *
+     * <p>{@code WATCH} is per-connection and this repository shares one, so the method is
+     * {@code synchronized} to keep two threads of this JVM from interleaving on it.
+     */
+    @Override
+    public synchronized boolean compareAndSetStatus(String executionId, WorkflowStatus expected, WorkflowStatus target)
+            throws SnapshotIOException {
+        if (executionId == null || expected == null || target == null) {
+            throw new SnapshotIOException("executionId, expected and target must not be null");
+        }
+        String key = key(executionId);
+        try {
+            commands.watch(key);
+            String json = commands.get(key);
+            if (json == null) {
+                commands.unwatch();
+                return false;
+            }
+            ExecutionContext context = ExecutionContext.fromJson(json);
+            if (context.getStatus() != expected) {
+                commands.unwatch();
+                return false;
+            }
+            context.setStatus(target);
+            context.setUpdatedTime(System.currentTimeMillis());
+
+            commands.multi();
+            commands.set(key, context.toJson());
+            TransactionResult result = commands.exec();
+            return result != null && !result.wasDiscarded();
+        } catch (Exception e) {
+            try { commands.unwatch(); } catch (Exception ignored) {}
+            throw new SnapshotIOException("Failed to claim execution in Redis: " + key, e);
+        }
+    }
+
+    @Override
+    public List<ExecutionContext> findByStatus(WorkflowStatus status) throws SnapshotIOException {
+        if (status == null) {
+            throw new SnapshotIOException("status must not be null");
+        }
+        List<ExecutionContext> found = new ArrayList<>();
+        try {
+            // SCAN rather than KEYS: this runs against a live server that may hold many snapshots.
+            ScanArgs args = ScanArgs.Builder.matches(KEY_PREFIX + "*").limit(256);
+            KeyScanCursor<String> cursor = commands.scan(args);
+            while (true) {
+                for (String key : cursor.getKeys()) {
+                    String json = commands.get(key);
+                    if (json == null) continue; // deleted while we scanned
+                    ExecutionContext context = ExecutionContext.fromJson(json);
+                    if (context.getStatus() == status) {
+                        found.add(context);
+                    }
+                }
+                if (cursor.isFinished()) break;
+                cursor = commands.scan(ScanCursor.of(cursor.getCursor()), args);
+            }
+        } catch (Exception e) {
+            throw new SnapshotIOException("Failed to list snapshots in Redis", e);
+        }
+        return found;
     }
 
     @Override

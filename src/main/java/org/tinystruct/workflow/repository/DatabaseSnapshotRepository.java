@@ -8,7 +8,9 @@ import org.tinystruct.workflow.WorkflowStatus;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.logging.Level;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -116,25 +118,7 @@ public class DatabaseSnapshotRepository implements SnapshotRepository {
                     new Object[]{executionId});
             try (ResultSet rs = operator.executeQuery(ps)) {
                 if (!rs.next()) return null;
-
-                ExecutionContext context = new ExecutionContext();
-                context.setExecutionId(rs.getString("execution_id"));
-                context.setWorkflowId(rs.getString("workflow_id"));
-                context.setCurrentNodeIndex(rs.getInt("node_index"));
-                context.setStatus(WorkflowStatus.valueOf(rs.getString("status")));
-                context.setSuspendReason(rs.getString("suspend_reason"));
-                context.setWaitingEventType(rs.getString("waiting_event_type"));
-                context.setFailureMessage(rs.getString("failure_message"));
-                context.setCreatedTime(rs.getLong("created_time"));
-                context.setUpdatedTime(rs.getLong("updated_time"));
-
-                String varsJson = rs.getString("variables");
-                if (varsJson != null && !varsJson.isBlank()) {
-                    Builder varsBuilder = new Builder();
-                    varsBuilder.parse(varsJson);
-                    context.setVariables(varsBuilder);
-                }
-                return context;
+                return map(rs);
             }
         } catch (Exception e) {
             throw new SnapshotIOException("Failed to load snapshot for execution: " + executionId, e);
@@ -153,5 +137,71 @@ public class DatabaseSnapshotRepository implements SnapshotRepository {
         } catch (Exception e) {
             throw new SnapshotIOException("Failed to delete snapshot for execution: " + executionId, e);
         }
+    }
+
+    /**
+     * A single conditional {@code UPDATE}: the database decides the winner, so this holds across
+     * processes and hosts. One row affected means this caller made the transition.
+     */
+    @Override
+    public boolean compareAndSetStatus(String executionId, WorkflowStatus expected, WorkflowStatus target)
+            throws SnapshotIOException {
+        if (executionId == null || expected == null || target == null) {
+            throw new SnapshotIOException("executionId, expected and target must not be null");
+        }
+        try (DatabaseOperator operator = new DatabaseOperator()) {
+            PreparedStatement ps = operator.preparedStatement(
+                    "UPDATE workflow_snapshots SET status = ?, updated_time = ?" +
+                    " WHERE execution_id = ? AND status = ?",
+                    new Object[]{target.name(), System.currentTimeMillis(), executionId, expected.name()});
+            return operator.executeUpdate(ps) == 1;
+        } catch (Exception e) {
+            throw new SnapshotIOException("Failed to claim execution: " + executionId, e);
+        }
+    }
+
+    @Override
+    public List<ExecutionContext> findByStatus(WorkflowStatus status) throws SnapshotIOException {
+        if (status == null) {
+            throw new SnapshotIOException("status must not be null");
+        }
+        List<ExecutionContext> found = new ArrayList<>();
+        try (DatabaseOperator operator = new DatabaseOperator()) {
+            PreparedStatement ps = operator.preparedStatement(
+                    "SELECT execution_id, workflow_id, node_index, status, variables," +
+                    " suspend_reason, waiting_event_type, failure_message, created_time, updated_time" +
+                    " FROM workflow_snapshots WHERE status = ?",
+                    new Object[]{status.name()});
+            try (ResultSet rs = operator.executeQuery(ps)) {
+                while (rs.next()) {
+                    found.add(map(rs));
+                }
+            }
+        } catch (Exception e) {
+            throw new SnapshotIOException("Failed to list snapshots with status: " + status, e);
+        }
+        return found;
+    }
+
+    /** Maps the current row of a full-column select onto an {@link ExecutionContext}. */
+    private static ExecutionContext map(ResultSet rs) throws SQLException, org.tinystruct.ApplicationException {
+        ExecutionContext context = new ExecutionContext();
+        context.setExecutionId(rs.getString("execution_id"));
+        context.setWorkflowId(rs.getString("workflow_id"));
+        context.setCurrentNodeIndex(rs.getInt("node_index"));
+        context.setStatus(WorkflowStatus.valueOf(rs.getString("status")));
+        context.setSuspendReason(rs.getString("suspend_reason"));
+        context.setWaitingEventType(rs.getString("waiting_event_type"));
+        context.setFailureMessage(rs.getString("failure_message"));
+        context.setCreatedTime(rs.getLong("created_time"));
+        context.setUpdatedTime(rs.getLong("updated_time"));
+
+        String varsJson = rs.getString("variables");
+        if (varsJson != null && !varsJson.isBlank()) {
+            Builder varsBuilder = new Builder();
+            varsBuilder.parse(varsJson);
+            context.setVariables(varsBuilder);
+        }
+        return context;
     }
 }
