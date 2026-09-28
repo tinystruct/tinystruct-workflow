@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.tinystruct</groupId>
     <artifactId>tinystruct-workflow</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <name>tinystruct-workflow</name>
     <description>Workflow engine module based on tinystruct framework</description>
     <url>https://tinystruct.org</url>
