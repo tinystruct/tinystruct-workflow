@@ -33,7 +33,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tinystruct.version>1.7.34</tinystruct.version>
+        <tinystruct.version>1.7.35</tinystruct.version>
         <lettuce.version>7.6.0.RELEASE</lettuce.version>
         <jupiter.version>6.1.1</jupiter.version>
     </properties>
